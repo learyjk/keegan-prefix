@@ -1,16 +1,32 @@
 const HIDDEN_FORM_NAME = `countryCode`;
+const DATA_FLAG_SELECT = `[data-element="flag"]`;
+const DATA_VALUE_SELECT = `[data-element="value"]`;
+const DATA_ITEM_SELECT = `[data-element="item"]`;
+const DATA_LIST_SELECT = `[data-element="list"]`;
+const CCA2_ATTR = `data-cca2`;
+const PREFIX_ATTR = `data-prefix`;
+const WEBFLOW_CURRENT_CLASSNAME = `w--current`;
 
 const dropdown = document.querySelector(`[data-element="dropdown"]`);
+// Disabled dropdown while populating data
 dropdown.style.pointerEvents = "none";
 
 document.addEventListener("DOMContentLoaded", async () => {
-  const templateItemNode = document.querySelector(`[data-element="item"]`);
-  const list = document.querySelector(`[data-element="list"]`);
-  const topPrefix = document.querySelector('[data-element="value"]');
-  const topFlag = document.querySelector(`[data-element="flag"]`);
+  //
+  // SETUP SELECTORS
+  //
 
-  let lastSelected = null;
+  const templateItemNode = document.querySelector(DATA_ITEM_SELECT);
+  const list = document.querySelector(DATA_LIST_SELECT);
+  const topPrefix = document.querySelector(DATA_VALUE_SELECT);
+  const topFlag = document.querySelector(DATA_FLAG_SELECT);
+
+  // Keeps track of currently selected list item
   let currentEl = null;
+
+  //
+  // UTILITY FUNCTIONS
+  //
 
   const getCountries = async () => {
     let url = "https://restcountries.com/v3.1/all";
@@ -19,6 +35,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     return data;
   };
 
+  // Parse prefix
+  // ref: https://en.wikipedia.org/wiki/List_of_mobile_telephone_prefixes_by_country
   const getPrefix = (idd) => {
     let prefix = idd.root;
     if (idd.suffixes?.[0] && idd.suffixes?.[0].length < 3) {
@@ -29,6 +47,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   };
 
   const createList = async () => {
+    // clears the dropdown list before populating with country data
     list.replaceChildren();
     const countries = await getCountries();
     countries.forEach((country) => {
@@ -37,46 +56,51 @@ document.addEventListener("DOMContentLoaded", async () => {
       const svgUrl = country.flags.svg;
       const prefix = getPrefix(country.idd);
 
+      // create, configure, and append the new node.
       if (templateItemNode) {
         let newItemNode = templateItemNode.cloneNode(true);
         newItemNode.title = name;
         newItemNode.ariaLabel = name;
-
-        newItemNode.querySelector(`[data-element="flag"]`).src = svgUrl;
-        newItemNode.querySelector(`[data-element="flag"]`).alt = `${name} Flag`;
-        newItemNode.querySelector(`[data-element="value"]`).innerHTML = cca2;
-        newItemNode.setAttribute(`data-cca2`, cca2);
+        newItemNode.querySelector(DATA_FLAG_SELECT).src = svgUrl;
+        newItemNode.querySelector(DATA_FLAG_SELECT).alt = `${name} Flag`;
+        newItemNode.querySelector(DATA_VALUE_SELECT).innerHTML = cca2;
+        newItemNode.setAttribute(CCA2_ATTR, cca2);
         newItemNode
-          .querySelector(`[data-element="value"]`)
-          .setAttribute(`data-prefix`, prefix);
+          .querySelector(DATA_VALUE_SELECT)
+          .setAttribute(PREFIX_ATTR, prefix);
 
         list.append(newItemNode);
       }
     });
   };
 
+  // handles updating classes, arias, attrs on user select
+  // stores selected country prefix in hidden form.
   const selectFromList = (selectedEl) => {
-    if (lastSelected) {
-      lastSelected.classList.remove("w--current");
-      lastSelected.ariaSelected = false;
+    if (currentEl) {
+      currentEl.classList.remove(WEBFLOW_CURRENT_CLASSNAME);
+      currentEl.ariaSelected = false;
     }
-    selectedEl.classList.add("w--current");
+    selectedEl.classList.add(WEBFLOW_CURRENT_CLASSNAME);
     selectedEl.ariaSelected = true;
 
+    // Indicate selection in top form.
     topPrefix.innerHTML = selectedEl
-      .querySelector('[data-element="value"]')
-      .getAttribute(`data-prefix`);
-    topFlag.src = selectedEl.querySelector(`[data-element="flag"]`).src;
+      .querySelector(DATA_VALUE_SELECT)
+      .getAttribute(PREFIX_ATTR);
+    topFlag.src = selectedEl.querySelector(DATA_FLAG_SELECT).src;
 
-    lastSelected = selectedEl;
+    // Update tracking var
     currentEl = selectedEl;
 
+    // Update hidden form
     document.querySelector(`input[name="${HIDDEN_FORM_NAME}"]`).value =
       topPrefix.innerHTML;
   };
 
   const closeDropdown = () => {
-    $(`[data-element="list"]`).trigger(`w-close`);
+    // Webflow jQuery to close dropdown.
+    $(DATA_LIST_SELECT).trigger(`w-close`);
   };
 
   const selectUserCountryOnLoad = async () => {
@@ -84,21 +108,29 @@ document.addEventListener("DOMContentLoaded", async () => {
     const response = await fetch(url);
     let data = await response.text();
 
-    // Parses text response from cloudflare to json
+    // Parses text response from cloudflare to json for ease
     data = data.replace(/[\r\n]+/g, '","').replace(/\=+/g, '":"');
     data = '{"' + data.slice(0, data.lastIndexOf('","')) + '"}';
     data = JSON.parse(data);
 
-    // Find the corresponding element
-    const userCountryEl = list.querySelector(`[data-cca2="${data.loc}"]`);
+    // Find and select the corresponding element
+    const userCountryEl = list.querySelector(`[${CCA2_ATTR}="${data.loc}"]`);
     selectFromList(userCountryEl);
   };
 
+  //
+  // EXECUTION
+  //
+
   await createList();
-  selectUserCountryOnLoad();
+  await selectUserCountryOnLoad();
   dropdown.style.pointerEvents = "auto";
 
-  list.querySelectorAll(`[data-element="item"]`).forEach((item) => {
+  //
+  // EVENT LISTENERS
+  //
+
+  list.querySelectorAll(DATA_ITEM_SELECT).forEach((item) => {
     item.addEventListener(`click`, (event) => {
       selectFromList(event.currentTarget);
       closeDropdown();
@@ -127,8 +159,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     } else if (keyPressed >= "A" && keyPressed <= "Z") {
       const firstElWithLetter = list.querySelector(
-        `[data-cca2^=${keyPressed}]`
+        `[${CCA2_ATTR}^=${keyPressed}]`
       );
+      if (!firstElWithLetter) return;
       firstElWithLetter.scrollIntoView({ block: `center` });
       selectFromList(firstElWithLetter);
     }
